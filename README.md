@@ -1,112 +1,87 @@
-*TASK MANAGEMENT FRAMEWORK*
+# Project: Task Management Framework
 
-DESCRIPTION
-This project is a simple yet flexible framework for managing tasks in a reproducible, automated manner. It uses:
+**Description**  
+This project is a simple yet flexible framework for managing tasks in a reproducible, automated manner. It uses a dedicated manager class to handle database interactions and a decorator to wrap user-defined functions, automatically caching results on disk for reproducibility. An optional config file can store database credentials, paths, and other settings.
 
-A "TaskManager" class (with SQLAlchemy) to handle database interactions (e.g., task creation, completion).
-A Python decorator ("@task") to wrap user-defined functions, automatically caching results on disk for reproducibility.
-An optional config file (config.yaml or Python config file) for storing database credentials, paths, and other settings.
 The framework supports:
+- Relational databases (SQLite, PostgreSQL, etc.) via SQLAlchemy.
+- Automatic caching of function outputs (DataFrame, dict, string, etc.) to files.
+- Task state management (PENDING, RUNNING, COMPLETED, FAILED).
+- Advanced features for skipping tasks if subtasks are in progress.
 
-Relational databases (SQLite, PostgreSQL, etc.) via SQLAlchemy.
-Automatic “caching” of function outputs (DataFrame, dict, etc.) to files (CSV, JSON, TXT).
-Task state management (PENDING, RUNNING, COMPLETED, FAILED).
-Eager or lazy retrieval of previously computed results.
-FOLDER STRUCTURE
-A typical folder layout for this project might look like:
+---
 
-task-management/ ├── LICENSE (optional license file) ├── README.txt (this document, describing your project) ├── pyproject.toml (modern build config, optional) ├── setup.py (classic setuptools build config, optional) ├── src/ │ └── task_management/ │ ├── init.py │ ├── config.py │ ├── decorators.py │ ├── models.py │ ├── task_manager.py │ └── other modules... ├── config.yaml (optional YAML config for DB credentials, etc.) ├── requirements.txt ├── results/ └── venv/ (your virtual environment, typically excluded from version control)
+## Installation from GitHub
 
-INSTALLATION FROM GITHUB
-To make your project installable via pip from GitHub, ensure you have:
+To make the project installable via pip from GitHub, ensure the repository has the necessary build configuration (for example, a setup file or pyproject file). Then install with:
 
-A valid setup.py (or pyproject.toml).
-Your Python code in a proper package folder (e.g. src/task_management).
-An init.py file in the package folder.
-Then someone can install it with:
+Use a pip command referencing your GitHub URL, such as:
+- A direct link to `master` or `main`.
+- A specific commit or tag.
 
-pip install git+https://github.com/youruser/yourrepo.git
+---
 
-They can also specify a specific commit or tag, e.g.:
+## Usage
 
-pip install git+https://github.com/youruser/yourrepo.git@v0.1.0
+1. **Setting up a database**  
+   By default, the code references a SQLite database or a configured value for the database URL. You can also use PostgreSQL by specifying the correct connection string.
 
-USAGE
-SETTING UP A DATABASE
+2. **Configuring defaults**  
+   Use either a Python config or YAML file to set variables like `DEFAULT_DB_URL` and `DEFAULT_RESULT_DIR`.
 
-By default, the code references a SQLite database or whatever is specified in DEFAULT_DB_URL.
-For PostgreSQL, the DB URL might look like: postgresql://user:pass@localhost:5432/mydb
-CONFIGURING DEFAULTS
+3. **Defining a task**  
+   Decorate your function with the provided decorator. The first time it is called with certain parameters, it will be executed and its results cached. Subsequent calls with identical parameters will load the cached output, unless configured otherwise.
 
-In config.py (or config.yaml), you can set: DEFAULT_DB_URL = "sqlite:///tasks.db" DEFAULT_RESULT_DIR = "results"
-The code in decorators.py references these defaults if no arguments are passed to the @task decorator.
-DEFINING A TASK
+4. **Caching and re-using results**  
+   If the same task is invoked again with the same parameters, the framework detects a previously completed task and automatically loads stored data instead of re-running the function.
 
-Import the "@task" decorator: from task_management.decorators import task
+---
 
-Wrap your function:
+## Configuration
 
-@task() def my_experiment(a, b, random_seed=123): # Some expensive computation return a + b
+An optional external file (such as YAML) can store:
+- Database credentials and host details.
+- Output directories and other application-level parameters.
 
-The first time you call my_experiment(2, 3), it will create a new task (PENDING -> RUNNING -> COMPLETED), run the function, store the output on disk, and store task metadata in the DB.
+You can load this file at runtime, build the database URL, and pass it to the manager or decorator.
 
-RE-USING / CACHING RESULTS
+---
 
-If you call my_experiment(2, 3) again with the same parameters, it detects that an identical task is COMPLETED, then automatically loads the cached result from disk instead of re-running the function.
-EXAMPLE CODE
+## Task States & Database
 
-Suppose you have main.py:
+The framework tracks:
+- **Immutable metadata** (task key, random seed, input parameters) in one table.
+- **Mutable state** (PENDING, RUNNING, COMPLETED, FAILED) in a related table.
 
-from task_management.decorators import task
+---
 
-@task() def my_task(x): print("Running with x =", x) return {"square": x*x}
+## Local File Caching
 
-if name == "main": out1 = my_task(5) print("Result:", out1)
+When tasks complete, their outputs are saved in a directory structured by module and function name. Each file is named based on a timestamp, an optional random seed, and the task key. On re-invocation with the same parameters, the framework looks up the cached file.
 
-bash
-Copy
-  out2 = my_task(5)  # Should return cached result
-  print("Cached result:", out2)
-CONFIGURATION FILE (OPTIONAL)
-If you want to store database credentials, output directories, or other settings externally, you can use:
+---
 
-A YAML file (config.yaml)
-A Python file (config.py) Or environment variables.
-An example config.yaml:
+## Advanced Features
 
-db: user: "myuser" password: "mypassword" host: "localhost" port: 5432 name: "mydatabase"
+- **Skipping tasks if subtasks are in progress**: A parent task can choose to skip its own execution if a child task is still running.
+- **Overriding cached results**: You can disable cache usage and force the function to re-run.
 
-app: output_dir: "results"
+---
 
-Then you can load it with PyYAML in your code, build the DB URL, and pass it to the TaskManager or the @task decorator.
+## Development & Contribution
 
-TASK STATES & DATABASE TABLES
-The models.py file typically defines:
+1. **Create a virtual environment** and install dependencies.  
+2. **Run tests** if available.  
+3. **Add features and bug fixes**, then contribute via pull requests.  
 
-TaskHeader: immutable metadata (task key, random seed, input_params, etc.)
-TaskState: mutable state (PENDING, RUNNING, COMPLETED, etc.) They’re linked by a one-to-one or one-to-many relationship.
-When you create a task, a row in TaskHeader + TaskState is inserted. Once the task is completed, the row in TaskState is updated to COMPLETED.
+---
 
-LOCAL FILE CACHING
-The decorator saves outputs to: {output_dir}/{module_name_with_underscores}/{function_name}/ Each file is named with the pattern: functionName_taskId_timestamp.(csv|json|txt)
+## License
 
-When the same task is invoked again with identical parameters, the code looks up the existing TaskHeader with state == COMPLETED, and if found, loads the file from disk.
+Include a license statement if open-sourcing (e.g., MIT, Apache 2.0, etc.).
 
-ADVANCED FEATURES
-Resuming tasks:
-You can store partial results, track steps, or define dependencies.
-Logging & error handling:
-The database or logs can record exceptions.
-Distributed computing:
-Each node can run tasks, store local copies, and optionally share them via a central repository or peer-to-peer.
-DEVELOPMENT & CONTRIBUTION
-Create a virtual environment: python -m venv venv source venv/bin/activate
-Install dependencies: pip install -r requirements.txt
-Run tests (if present).
-Make changes, add features, update docs or config as needed.
-Submit a pull request if you are collaborating with others on GitHub.
-LICENSE
-Include a LICENSE file or statement if this is open-source. For example, MIT, Apache 2.0, etc.
+---
 
-CONTACT
-For questions or support, please reach out via the GitHub issues on the repository or email the maintainer at you@example.com.
+## Contact
+
+If you have questions or need support, open an issue in the repository or contact the maintainer via email.
