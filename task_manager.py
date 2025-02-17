@@ -15,7 +15,7 @@ class TaskManager:
         self,
         # For PostgreSQL:
         # Format: "postgresql://username:password@host:port/dbname"
-        db_url='postgresql://user:password@localhost:5432/mydb',
+        db_url='postgresql://user:password@localhost:5432/banana-mydb',
         echo=False,
         pool_size=5,
         max_overflow=10,
