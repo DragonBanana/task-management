@@ -135,6 +135,28 @@ class TaskManager:
 
             return True
 
+    def find_incomplete_task(self, task_key, input_params=None):
+        """
+        Returns a TaskHeader that matches (task_key, input_params)
+        and is in PENDING or RUNNING state, or None if not found.
+        """
+        with self.session_scope() as session:
+            query = (
+                session.query(TaskHeader)
+                .join(TaskState)
+                .filter(
+                    TaskHeader.task_key == task_key,
+                    TaskState.status.in_(["PENDING", "RUNNING"])
+                )
+            )
+            if input_params is not None:
+                query = query.filter(TaskHeader.input_params == input_params)
+
+            header = query.first()
+            if header:
+                session.expunge(header)
+            return header
+
     def find_completed_task(self, task_key, input_params=None):
         """
         Return a COMPLETED TaskHeader with the given task_key & input_params.

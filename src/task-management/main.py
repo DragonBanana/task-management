@@ -1,41 +1,25 @@
-# main.py
-
-import pandas as pd
 from decorators import task
+from exception import SubtaskInProgressException
 
-@task()
-def my_experiment(a, b, random_seed=42):
-    # Example: returns a DataFrame
-    import numpy as np
-    data = {
-        'col1': np.random.rand(a),
-        'col2': [b]*a
-    }
-    return pd.DataFrame(data)
+@task(skip_if_in_progress=True)
+def B(x):
+    # Some logic that might take a while
+    import time
+    time.sleep(10)
+    return x*x
 
-@task()
-def compute_something(x, random_seed=123):
-    # Example: returns a dict
-    return {"value": x**2, "seed": random_seed}
+@task(skip_if_in_progress=True)
+def A(x):
+    # A calls B, but if B is in progress, B's decorator
+    # raises SubtaskInProgressException => skip A
+    valB = B(x)
+    return valB + 1
 
 def main():
-    # First call: not cached, so the function runs
-    df_result = my_experiment(6, 10, random_seed=999)
-    print("DF result shape:", df_result.shape)
-
-    # Second call with same args:
-    #   -> detects an existing COMPLETED task
-    #   -> reloads from disk, skipping re-computation
-    df_result2 = my_experiment(6, 10, random_seed=999)
-    print("DF result2 shape (cached):", df_result2.shape)
-
-    # Different function, returns a dict
-    dict_res = compute_something(5, random_seed=777)
-    print("Dict result:", dict_res)
-
-    # Re-call with same args -> loads from disk
-    dict_res2 = compute_something(5, random_seed=777)
-    print("Dict result2 (cached):", dict_res2)
+    # Suppose we run B(5) in one thread => it's in progress
+    # Another thread calls A(5) => sees B(5) in progress => skip A
+    rA = A(6)
+    print("A(5) result:", rA)
 
 if __name__ == "__main__":
     main()

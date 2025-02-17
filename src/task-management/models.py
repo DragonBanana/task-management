@@ -36,6 +36,30 @@ class TaskHeader(Base):
         lazy='joined'
     )
 
+    def __repr__(self):
+        """
+        Official string representation, for debugging.
+        Shows the class name and key fields.
+        """
+        return (f"<TaskHeader(id={self.id}, "
+                f"task_key={self.task_key!r}, "
+                f"random_seed={self.random_seed}, "
+                f"input_params={self.input_params}, "
+                f"created_at={self.created_at}, "
+                f"result_location={self.result_location!r}, "
+                f"result_format={self.result_format!r})>")
+
+    def __str__(self):
+        """
+        User-friendly string representation, often used in print statements.
+        Could include fewer or more readable details than __repr__.
+        """
+        return (f"TaskHeader["
+                f"id={self.id}, "
+                f"key={self.task_key}, "
+                f"seed={self.random_seed}, "
+                f"created={self.created_at}]")
+
 class TaskState(Base):
     """
     Mutable state of the task: status, times, error messages, etc.
