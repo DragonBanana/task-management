@@ -5,7 +5,7 @@ from sqlalchemy import (
     Column, Integer, String, Float, DateTime,
     ForeignKey, Text
 )
-from sqlalchemy.dialects.sqlite import JSON as SqliteJSON
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
@@ -20,7 +20,10 @@ class TaskHeader(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     task_key = Column(String(255), nullable=False, unique=False)
     random_seed = Column(Integer, nullable=True)
-    input_params = Column(SqliteJSON, nullable=True)
+
+    # Replace the Sqlite-specific JSON column with PostgreSQL's JSONB
+    input_params = Column(JSONB, nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     result_location = Column(String(500), nullable=True)
     result_format = Column(String(50), nullable=True)
