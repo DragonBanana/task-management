@@ -3,7 +3,7 @@
 import pandas as pd
 from decorators import task
 
-@task(db_url='postgresql://banana-myuser:banana-mypassword@localhost:5432/banana-mydb', output_dir='my_outputs')
+@task()
 def my_experiment(a, b, random_seed=42):
     # Example: returns a DataFrame
     import numpy as np
@@ -13,28 +13,28 @@ def my_experiment(a, b, random_seed=42):
     }
     return pd.DataFrame(data)
 
-@task(db_url='postgresql://banana-myuser:banana-mypassword@localhost:5432/banana-mydb', output_dir='my_outputs')
+@task()
 def compute_something(x, random_seed=123):
     # Example: returns a dict
     return {"value": x**2, "seed": random_seed}
 
 def main():
     # First call: not cached, so the function runs
-    df_result = my_experiment(5, 10, random_seed=999)
+    df_result = my_experiment(6, 10, random_seed=999)
     print("DF result shape:", df_result.shape)
 
     # Second call with same args:
     #   -> detects an existing COMPLETED task
     #   -> reloads from disk, skipping re-computation
-    df_result2 = my_experiment(5, 10, random_seed=999)
+    df_result2 = my_experiment(6, 10, random_seed=999)
     print("DF result2 shape (cached):", df_result2.shape)
 
     # Different function, returns a dict
-    dict_res = compute_something(4, random_seed=777)
+    dict_res = compute_something(5, random_seed=777)
     print("Dict result:", dict_res)
 
     # Re-call with same args -> loads from disk
-    dict_res2 = compute_something(4, random_seed=777)
+    dict_res2 = compute_something(5, random_seed=777)
     print("Dict result2 (cached):", dict_res2)
 
 if __name__ == "__main__":

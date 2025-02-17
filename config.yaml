@@ -1,0 +1,9 @@
+db:
+  user: "banana-myuser"
+  password: "banana-mypassword"
+  host: "localhost"
+  port: 5432
+  name: "banana-mydb"
+
+app:
+  output_dir: "task_outputs"

@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "task-management"
+version = "0.1.0"
+description = "A simple task management framework with decorators"
+readme = "README.md"
+authors = [
+  { name="Davide Yi Xian Hu", email="davideyi.hu@polimi.it" },
+]
+license = { file="LICENSE" }
+requires-python = ">=3.7"
+dependencies = [
+  "sqlalchemy",
+  "pandas",
+  "pyyaml",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/dragonbanana/task-management"
+"Bug Tracker" = "https://github.com/dragonbanana/task-management/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
