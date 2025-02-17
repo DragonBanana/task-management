@@ -3,7 +3,7 @@
 import pandas as pd
 from decorators import task
 
-@task(db_url='postgresql://user:password@localhost:5432/banana-mydb', output_dir='my_outputs')
+@task(db_url='postgresql://banana-myuser:banana-mypassword@localhost:5432/banana-mydb', output_dir='my_outputs')
 def my_experiment(a, b, random_seed=42):
     # Example: returns a DataFrame
     import numpy as np
@@ -13,7 +13,7 @@ def my_experiment(a, b, random_seed=42):
     }
     return pd.DataFrame(data)
 
-@task(db_url='postgresql://user:password@localhost:5432/banana-mydb', output_dir='my_outputs')
+@task(db_url='postgresql://banana-myuser:banana-mypassword@localhost:5432/banana-mydb', output_dir='my_outputs')
 def compute_something(x, random_seed=123):
     # Example: returns a dict
     return {"value": x**2, "seed": random_seed}
