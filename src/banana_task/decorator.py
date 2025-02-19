@@ -1,5 +1,7 @@
-# src/mytaskmanager/decorators.py
+# mytaskmanager/decorators.py
+
 import json
+import logging
 import inspect
 from functools import wraps
 from datetime import datetime
@@ -7,57 +9,56 @@ from datetime import datetime
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from config import load_config
-from model import Base, Task, TaskStatus
-from output import JSONOutputManager
+from .config import load_config
+from .model import Base, Task, TaskStatus
+from .output import JSONOutputManager
+from .exception import TaskInProgressError, TaskFailedError
 
 
-def task(
-        db_url=None,
-        output_dir=None,
-        use_cache=None,
-        skip_if_in_progress=None
-):
+def task():
     """
-    Decorator that converts a function into a tracked task.
-
-    If any of the arguments are None, we fall back to the library's loaded config.
+    Decorator that reads *all* parameters from the global config.
+    No arguments are taken here, because db_url, output_dir, use_cache,
+    skip_if_in_progress, project_name, and log_level all come from config.
     """
+    # Load entire config
+    cfg = load_config()
+    db_url = cfg["db_url"]
+    output_dir = cfg["output_dir"]
+    use_cache = cfg["use_cache"]
+    skip_if_in_progress = cfg["skip_if_in_progress"]
+    project_name = cfg["project_name"]
+    log_level_str = cfg["log_level"]
+
+    # Set up logging
+    logger = logging.getLogger("banana_task")
+    level = getattr(logging, log_level_str.upper(), logging.INFO)
+    logger.setLevel(level)
 
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
-            # 1. Load global config and override with function arguments (if not None)
-            global_cfg = load_config()
-            effective_db_url = db_url or global_cfg["db_url"]
-            effective_output_dir = output_dir or global_cfg["output_dir"]
-            effective_use_cache = use_cache if use_cache is not None else global_cfg["use_cache"]
-            effective_skip_if_in_progress = (skip_if_in_progress
-                                             if skip_if_in_progress is not None
-                                             else global_cfg["skip_if_in_progress"])
+            logger.info(f"=== [Project: {project_name}] Starting task decorator for '{func.__name__}' ===")
 
-            # 2. Derive param_dict from function signature
+            # 1. Gather function parameters and turn them into a JSON string
             sig = inspect.signature(func)
-            bound = sig.bind(*args, **kwargs)
-            bound.apply_defaults()
-            param_dict = dict(bound.arguments)  # e.g. {"x": 10, "y": "foo"}
-
-            # 3. Convert param_dict to a JSON string to store in DB
+            bound_args = sig.bind(*args, **kwargs)
+            bound_args.apply_defaults()
+            param_dict = dict(bound_args.arguments)
             param_json_str = json.dumps(param_dict, sort_keys=True)
             task_name = func.__name__
-            creation_time = datetime.utcnow()
 
-            # 4. Prepare DB session
-            engine = create_engine(effective_db_url, echo=False)
+            # 2. Connect to the DB
+            engine = create_engine(db_url, echo=False)
             Base.metadata.create_all(engine)
             Session = sessionmaker(bind=engine)
             session = Session()
 
-            # 5. Prepare JSONOutputManager
-            output_mgr = JSONOutputManager(effective_output_dir)
+            # 3. Prepare the JSON output manager for caching
+            output_mgr = JSONOutputManager(output_dir)
 
             try:
-                # 6. Find or create Task record
+                # 4. Find or create the Task record
                 existing_task = session.query(Task).filter_by(
                     task_name=task_name,
                     parameters=param_json_str
@@ -68,61 +69,76 @@ def task(
                         task_name=task_name,
                         parameters=param_json_str,
                         status=TaskStatus.CREATED,
-                        creation_time=creation_time
+                        creation_time=datetime.utcnow()
                     )
                     session.add(existing_task)
                     session.commit()
+                    logger.info(f"[{project_name}] Created new task record: {task_name} | {param_dict}")
 
-                # 7. Skip if in progress
-                if effective_skip_if_in_progress and existing_task.status == TaskStatus.RUNNING:
-                    print(f"[task] Skipping '{task_name}' - already running.")
+                # 5. Check if we should skip if it's already in progress
+                if skip_if_in_progress and existing_task.status == TaskStatus.RUNNING:
+                    msg = (f"[{project_name}] Task '{task_name}' (params={param_dict}) is already RUNNING; "
+                           "skip_if_in_progress is True → raising TaskInProgressError")
+                    logger.warning(msg)
                     session.close()
-                    return None
+                    raise TaskInProgressError(msg)
 
-                # 8. If use_cache & COMPLETED, try to load from JSON
-                if effective_use_cache and existing_task.status == TaskStatus.COMPLETED:
+                # 6. If use_cache and the task is completed, try to load from JSON
+                if use_cache and existing_task.status == TaskStatus.COMPLETED:
                     cached_result = output_mgr.load_output(task_name, param_dict)
                     if cached_result is not None:
-                        print(f"[task] Using cached result for '{task_name}'.")
+                        logger.info(f"[{project_name}] Using cached result for '{task_name}' | {param_dict}")
                         session.close()
                         return cached_result
+                    else:
+                        logger.debug(f"[{project_name}] Completed in DB, but no JSON file found → re-run function.")
 
-                # 9. Update to RUNNING
+                # 7. Mark the task as RUNNING
                 existing_task.status = TaskStatus.RUNNING
-                if existing_task.creation_time is None:
-                    existing_task.creation_time = creation_time
+                if not existing_task.creation_time:
+                    existing_task.creation_time = datetime.utcnow()
                 session.commit()
+                logger.info(f"[{project_name}] Task '{task_name}' is now RUNNING with params={param_dict}")
 
-                # 10. Run the function
+                # 8. Run the actual function
                 start_time = datetime.utcnow()
                 try:
                     result = func(*args, **kwargs)
                     end_time = datetime.utcnow()
                 except Exception as e:
-                    # Mark FAILED
+                    # Mark as FAILED
                     end_time = datetime.utcnow()
                     existing_task.status = TaskStatus.FAILED
                     existing_task.completion_time = end_time
                     existing_task.duration_seconds = int((end_time - existing_task.creation_time).total_seconds())
                     session.commit()
-                    session.close()
-                    raise
 
-                # 11. Save to JSON file
+                    err_msg = (f"[{project_name}] Task '{task_name}' (params={param_dict}) "
+                               f"failed with error: {e}")
+                    logger.exception(err_msg)
+                    session.close()
+                    raise TaskFailedError(err_msg) from e
+
+                # 9. Save the result to a JSON file
                 result_path = output_mgr.save_output(task_name, param_dict, result)
 
-                # 12. Mark COMPLETED
+                # 10. Mark COMPLETED in DB
                 existing_task.status = TaskStatus.COMPLETED
                 existing_task.completion_time = end_time
-                duration = (end_time - existing_task.creation_time).total_seconds()
-                existing_task.duration_seconds = int(duration)
+                existing_task.duration_seconds = int((end_time - existing_task.creation_time).total_seconds())
                 existing_task.result_path = result_path
                 session.commit()
 
+                logger.info(
+                    f"[{project_name}] Task '{task_name}' completed in {existing_task.duration_seconds} sec. "
+                    f"Result saved to {result_path}"
+                )
+
                 return result
+
             finally:
                 session.close()
+                logger.debug(f"[{project_name}] Session closed for '{task_name}'")
 
         return wrapper
-
     return decorator

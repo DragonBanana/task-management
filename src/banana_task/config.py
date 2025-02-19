@@ -6,7 +6,9 @@ DEFAULT_CONFIG = {
     "db_url": "sqlite:///my_tasks.db",
     "output_dir": "./results",
     "use_cache": True,
-    "skip_if_in_progress": False
+    "skip_if_in_progress": False,
+    "project_name": "DefaultProject",
+    "log_level": "INFO",  # Could be DEBUG/INFO/WARNING/ERROR/CRITICAL
 }
 
 def get_config_file() -> str:
