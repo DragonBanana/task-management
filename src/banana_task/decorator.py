@@ -7,6 +7,7 @@ from functools import wraps
 from datetime import datetime
 
 from sqlalchemy import create_engine
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 
 from .config import load_config
@@ -52,7 +53,7 @@ def task():
             engine = create_engine(db_url, echo=False)
             Base.metadata.create_all(engine)
             Session = sessionmaker(bind=engine)
-            session = Session()
+            session = Session(expire_on_commit=False)
 
             # 3. Prepare the JSON output manager for caching
             output_mgr = JSONOutputManager(output_dir)
@@ -65,15 +66,26 @@ def task():
                 ).first()
 
                 if not existing_task:
-                    existing_task = Task(
+                    new_task = Task(
                         task_name=task_name,
                         parameters=param_json_str,
                         status=TaskStatus.CREATED,
                         creation_time=datetime.utcnow()
                     )
-                    session.add(existing_task)
-                    session.commit()
-                    logger.info(f"[{project_name}] Created new task record: {task_name} | {param_dict}")
+                    session.add(new_task)
+                    try:
+                        session.commit()
+                        existing_task = new_task  # Insert succeeded
+                        logger.info(f"[{project_name}] Created new task record: {task_name} | {param_dict}")
+                    except IntegrityError:
+                        # Another process inserted the same key first
+                        session.rollback()
+                        existing_task = session.query(Task).filter_by(
+                            task_name=task_name,
+                            parameters=param_json_str
+                        ).one()
+                        logger.info(
+                            f"[{project_name}] Task record already existed, fetched existing: {task_name} | {param_dict}")
 
                 # 5. Check if we should skip if it's already in progress
                 if skip_if_in_progress and existing_task.status == TaskStatus.RUNNING:
