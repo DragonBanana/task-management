@@ -1,14 +1,14 @@
 # mytaskmanager/decorators.py
-
+import hashlib
 import json
 import logging
 import inspect
 from functools import wraps
 from datetime import datetime
-
 from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
+import sqlalchemy
 
 from .config import load_config
 from .model import Base, Task, TaskStatus
@@ -61,6 +61,7 @@ def task():
             bound_args.apply_defaults()
             param_dict = dict(bound_args.arguments)
             param_json_str = json.dumps(param_dict, sort_keys=True)
+            param_hash = hashlib.md5(param_json_str.encode("utf-8")).hexdigest()
             task_name = func.__name__
 
             # 2. Open a new DB session (reusing the global engine + session factory)
@@ -70,13 +71,16 @@ def task():
                 # 3. Find or create the Task record
                 existing_task = session.query(Task).filter_by(
                     task_name=task_name,
-                ).filter(Task.parameters == param_dict).first()
+                    parameters_hash=param_hash,
+                    parameters=param_dict,
+                ).first()
 
                 if not existing_task:
                     # Insert a new row
                     new_task = Task(
                         task_name=task_name,
-                        parameters=param_json_str,
+                        parameters_hash=param_hash,
+                        parameters=param_dict,
                         status=TaskStatus.CREATED,
                         creation_time=datetime.utcnow()
                     )
@@ -90,7 +94,9 @@ def task():
                         session.rollback()
                         existing_task = session.query(Task).filter_by(
                             task_name=task_name,
-                        ).filter(Task.parameters == param_dict).one()
+                            parameters_hash=param_hash,
+                            parameters=param_dict,
+                        ).one()
                         logger.info(f"[{PROJECT_NAME}] Task record already existed, fetched existing: {task_name} | {param_dict}")
 
                 # 4. Check if we should skip if it's already running

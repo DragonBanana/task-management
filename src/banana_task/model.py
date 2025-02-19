@@ -26,7 +26,8 @@ class Task(Base):
 
     # Composite primary key: (task_name, serialized_parameters)
     task_name = Column(String(255), primary_key=True)
-    parameters = Column(JSONB, primary_key=True)
+    parameters_hash = Column(String(64), primary_key=True)
+    parameters = Column(JSONB)
 
     status = Column(Enum(TaskStatus), nullable=False)
     creation_time = Column(DateTime, nullable=False, default=datetime.utcnow)
