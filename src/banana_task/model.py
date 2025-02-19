@@ -34,13 +34,6 @@ class Task(Base):
     duration_seconds = Column(BigInteger, nullable=True)
     result_path = Column(Text, nullable=True)
 
-    __table_args__ = (
-        CheckConstraint(
-            "status IN ('created','running','completed','failed')",
-            name="tasks_status_check"
-        ),
-    )
-
     def __repr__(self):
         return (
             f"<Task(task_name='{self.task_name}', "
