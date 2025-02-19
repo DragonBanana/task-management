@@ -70,8 +70,7 @@ def task():
                 # 3. Find or create the Task record
                 existing_task = session.query(Task).filter_by(
                     task_name=task_name,
-                    parameters=param_json_str
-                ).first()
+                ).filter(Task.parameters == param_dict).first()
 
                 if not existing_task:
                     # Insert a new row
@@ -91,8 +90,7 @@ def task():
                         session.rollback()
                         existing_task = session.query(Task).filter_by(
                             task_name=task_name,
-                            parameters=param_json_str
-                        ).one()
+                        ).filter(Task.parameters == param_dict).one()
                         logger.info(f"[{PROJECT_NAME}] Task record already existed, fetched existing: {task_name} | {param_dict}")
 
                 # 4. Check if we should skip if it's already running
