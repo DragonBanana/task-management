@@ -33,7 +33,7 @@ LOG_LEVEL_STR = CONFIG["log_level"]
 # 2) Configure the logger once
 logger = logging.getLogger("banana_task")
 level = getattr(logging, LOG_LEVEL_STR.upper(), logging.INFO)
-logging.basicConfig(level = logging.INFO)
+logging.basicConfig(level=logging.INFO)
 logger.setLevel(level)
 
 # 3) Create the global SQLAlchemy engine & session factory
@@ -44,18 +44,32 @@ SessionFactory = sessionmaker(bind=engine, expire_on_commit=False)
 # 4) Reuse a single JSONOutputManager
 output_mgr = JSONOutputManager(OUTPUT_DIR)
 
+
 ############################################
 #           The Decorator                  #
 ############################################
 
-def task():
+def task(use_cache: bool = None, skip_if_in_progress: bool = None):
     """
     Decorator that uses module-level globals for config, logging, engine, etc.
+    Allows overriding 'use_cache' and 'skip_if_in_progress' on a per-function basis:
+
+    @task(use_cache=False, skip_if_in_progress=True)
+    def my_func(...):
+        ...
+
+    If not set, defaults come from the global config in CONFIG.
     """
+
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
             logger.info(f"=== [Project: {PROJECT_NAME}] Starting '{func.__name__}' ===")
+
+            # Resolve the effective caching/skipping policy:
+            # If user didn't pass them, fallback to the global config values
+            effective_use_cache = USE_CACHE if use_cache is None else use_cache
+            effective_skip_in_progress = SKIP_IF_IN_PROGRESS if skip_if_in_progress is None else skip_if_in_progress
 
             # 1. Gather function parameters and turn them into a JSON string & hash
             sig = inspect.signature(func)
@@ -122,7 +136,7 @@ def task():
                         )
 
                 # 4. Check if we should skip if it's already running
-                if SKIP_IF_IN_PROGRESS and existing_task.status == TaskStatus.RUNNING:
+                if effective_skip_in_progress and existing_task.status == TaskStatus.RUNNING:
                     msg = (
                         f"[{PROJECT_NAME}] Task '{task_name}' (params={param_dict}) is RUNNING; "
                         "skip_if_in_progress=True → TaskInProgressError raised."
@@ -131,8 +145,8 @@ def task():
                     session.close()
                     raise TaskInProgressError(msg)
 
-                # 5. If USE_CACHE and the task is completed, try to load from JSON
-                if USE_CACHE and existing_task.status == TaskStatus.COMPLETED:
+                # 5. If effective_use_cache and the task is completed, try to load from JSON
+                if effective_use_cache and existing_task.status == TaskStatus.COMPLETED:
                     logger.debug(f"[{PROJECT_NAME}] Task is COMPLETED in DB, checking JSON cache.")
                     cached_result = output_mgr.load_output(task_name, param_dict)
                     if cached_result is not None:
@@ -206,4 +220,5 @@ def task():
                 logger.debug(f"[{PROJECT_NAME}] Session closed for '{task_name}'")
 
         return wrapper
+
     return decorator
