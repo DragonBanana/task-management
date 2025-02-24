@@ -1,2 +1,10 @@
 .idea
 .idea/*
+
+/src/task-management/
+/src/task_management.egg-info/
+/src/banana_task.egg-info/
+/venv/
+/build/
+/custom_results/
+/results/
